@@ -263,3 +263,4 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cellPrefab: {fileID: 7019043283709011543, guid: da572288281e0464ba1540b0e130e308, type: 3}
+  edgePrefab: {fileID: 4803719660106387252, guid: 45422046dfaae4d4da4b74b631c966ad, type: 3}

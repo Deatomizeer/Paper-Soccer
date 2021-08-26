@@ -27,9 +27,8 @@ public class BoardManager : MonoBehaviour
         }
     }
     List<GameMove> pastMoves = new List<GameMove>();
-    List<GameMove> boardBoundaries = new List<GameMove>();   // Moving the ball along the boundary line is not allowed.    
-    // Set of nodes that the ball can be moves into on the next move.
-    List<GameObject> legalMoveDestinations;
+    List<GameObject> pastMovesView = new List<GameObject>(); // For ease of restarting the game.
+    List<GameMove> boardBoundaries = new List<GameMove>();   // Moving the ball along the boundary line is not allowed.
 
     // Start is called before the first frame update
     void Start()
@@ -72,11 +71,13 @@ public class BoardManager : MonoBehaviour
                     boardBoundaries.Add(new GameMove(boardView[boardHeight - 2, j], boardView[boardHeight - 2, j + 1]));
                     // Diagonal boundaries between the two horizontal rows.
                     boardBoundaries.Add(new GameMove(boardView[0, j], boardView[1, j + 1]));
+                    boardBoundaries.Add(new GameMove(boardView[1, j], boardView[0, j + 1]));
                     boardBoundaries.Add(new GameMove(boardView[boardHeight-1, j], boardView[boardHeight-2, j + 1]));
+                    boardBoundaries.Add(new GameMove(boardView[boardHeight-2, j], boardView[boardHeight-1, j + 1]));
                 }
             }
         }
-        for(int i=1; i<boardHeight-1; i++)
+        for(int i=0; i<boardHeight-1; i++)
         {
             // Vertical boundaries on left and right.
             boardBoundaries.Add(new GameMove(boardView[i, 0], boardView[i+1, 0]));
@@ -91,6 +92,8 @@ public class BoardManager : MonoBehaviour
             Vector3 edgePos = new Vector3(edgeX, edgeY, 0);
             Instantiate(edgePrefab, edgePos, Quaternion.identity);
         }
+        // Copy board boundaries into moves made for ease of checking.
+        pastMoves = new List<GameMove>(boardBoundaries);
     }
 
     // Determine what should the cell be based on its position.
@@ -144,19 +147,104 @@ public class BoardManager : MonoBehaviour
 
     }
     
-    // Find all allowed moves from current ball position.
+    // Find all allowed moves from current ball position. Will probably break if called
     List<GameObject> GetLegalMoves()
     {
-        List<GameObject> moves = new List<GameObject>();
+        List<GameObject> destinations = new List<GameObject>();
         // Ensure the search scope won't try reaching out of bounds.
         int iterStartX = xBall > 0 ? xBall - 1 : 0;
-        int iterEndX = xBall < boardWidth - 1 ? xBall + 1 : boardWidth;
+        int iterEndX = xBall < boardWidth - 1 ? xBall + 2 : boardWidth;
         int iterStartY = yBall > 0 ? yBall - 1 : 0;
-        int iterEndY = yBall < boardHeight - 1 ? yBall + 1 : boardHeight;
-
-        return moves;
+        int iterEndY = yBall < boardHeight - 1 ? yBall + 2 : boardHeight;
+        // Iterate over all neighbors.
+        for(int i = iterStartY; i < iterEndY; i++)
+        {
+            for(int j = iterStartX; j < iterEndX; j++)
+            {
+                // Scoring a goal is always an option (at least with the regular board layout).
+                if(boardLogic[i, j] is Goal)
+                {
+                    destinations.Add(boardView[i, j]);
+                }
+                // Skip self to prevent stalling the game.
+                else if((boardLogic[i, j] as Interjection).hasBall)
+                {
+                    continue;
+                }
+                else
+                {
+                    // See if this move (or its reverse) has already been made. If not, they are valid.
+                    GameMove move = new GameMove(boardView[yBall, xBall], boardView[i, j]);
+                    GameMove reverseMove = new GameMove(boardView[i, j], boardView[yBall, xBall]);
+                    bool hasBeenMade = false;
+                    foreach(GameMove m in pastMoves)
+                    {
+                        if(
+                            (m.firstNode == move.firstNode && m.secondNode == move.secondNode)
+                            || (m.firstNode == reverseMove.firstNode && m.secondNode == reverseMove.secondNode)
+                        )
+                        {
+                            hasBeenMade = true;
+                            break;
+                        }
+                    }
+                    if(!hasBeenMade)
+                    {
+                        destinations.Add(boardView[i, j]);
+                    }
+                }
+            }
+        }
+        string d = "Allowed moves: ";
+        foreach(GameObject dest in destinations)
+        {
+            string tmp = "(" + dest.transform.position.x + ", " + dest.transform.position.y + ") ";
+            d += tmp;
+        }
+        Debug.Log(d);
+        return destinations;
     }
 
+    // Try to move the ball to the selected node.
+    public void MakeMove(GameObject dest)
+    {
+        List<GameObject> legalMoves = GetLegalMoves();
+        if (legalMoves.Contains(dest))
+        {
+            // All good, make this move.
+            Cell destCell = dest.GetComponent<Cell>();
+            if ( destCell.thisInterjection is Goal )
+            {
+                ScoreGoal((destCell.thisInterjection as Goal).affiliation);
+                return;
+            }
+            // Create a new edge after this move.
+            GameMove thisMove = new GameMove(boardView[yBall, xBall], dest);
+            pastMoves.Add(thisMove);
+            float edgeX = (thisMove.firstNode.transform.position.x + thisMove.secondNode.transform.position.x) * .5f;
+            float edgeY = (thisMove.firstNode.transform.position.y + thisMove.secondNode.transform.position.y) * .5f;
+            Vector3 edgePos = new Vector3(edgeX, edgeY, 0);
+            pastMovesView.Add(
+                Instantiate(edgePrefab, edgePos, Quaternion.identity)
+            );
+            // Change the previous cell state to wall for logic purposes.
+            (boardLogic[yBall, xBall] as Interjection).status = InterjectionStatus.WALL;
+            // Move the ball to the destination.
+            (boardLogic[yBall, xBall] as Interjection).hasBall = false;
+            boardView[yBall, xBall].GetComponent<Cell>().spriteRenderer.color = Color.black;    // Wall color.
+            (destCell.thisInterjection as Interjection).hasBall = true;
+            destCell.spriteRenderer.color = Color.yellow;
+            xBall = (int)dest.transform.position.x;
+            yBall = (int)dest.transform.position.y;
+        }
+        //Debug.Log("Ball on (" + xBall.ToString() + ", " + yBall.ToString() + ")");
+    }
+
+    // Score a goal and end the round.
+    public void ScoreGoal(GoalAffiliation aff)
+    {
+        Debug.Log(aff.ToString() + " scores a goal!");
+    }
     // Update is called once per frame
     void Update()
     {
