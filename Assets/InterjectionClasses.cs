@@ -16,9 +16,11 @@ public abstract class InterjectionAbstract
 public class Interjection : InterjectionAbstract
 {
     public InterjectionStatus status;
-    public Interjection(InterjectionStatus status)
+    public bool hasBall;
+    public Interjection(InterjectionStatus status, bool hasBall)
     {
         this.status = status;
+        this.hasBall = hasBall;
     }
 }
 

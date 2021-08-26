@@ -10,16 +10,21 @@ public class Cell : MonoBehaviour
     void Start()
     {
         spriteRenderer = gameObject.GetComponent<SpriteRenderer>();
-        // Walls are black, blanks are white.
+        // Walls are black, ball is yellow, blanks are white.
         if(thisInterjection is Interjection)
         {
-            if((thisInterjection as Interjection).status == InterjectionStatus.WALL)
+            switch((thisInterjection as Interjection).status)
             {
-                spriteRenderer.color = Color.black;
+                case InterjectionStatus.WALL:
+                    spriteRenderer.color = Color.black;
+                    break;
+                default:
+                    spriteRenderer.color = Color.white;
+                    break;
             }
-            else
+            if((thisInterjection as Interjection).hasBall)
             {
-                spriteRenderer.color = Color.white;
+                spriteRenderer.color = Color.yellow;
             }
         }
         // Player1 is red, Player2 is blue.
