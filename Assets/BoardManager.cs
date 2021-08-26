@@ -1,12 +1,18 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class BoardManager : MonoBehaviour
 {
     // Prefabs.
     public GameObject cellPrefab;
     public GameObject edgePrefab;
+    // Object references.
+    public Text endGameText;
+    public Text scoreText;
+    public GameObject scoreKeeper;
     // Board size.
     const int boardWidth = 9;
     const int boardHeight = 13;
@@ -32,10 +38,20 @@ public class BoardManager : MonoBehaviour
     List<GameMove> boardBoundaries = new List<GameMove>();   // Moving the ball along the boundary line is not allowed.
     // Current player, used to prevent unauthorised movement during the opponent's turn.
     GoalAffiliation currentPlayer;
+    // Current score (kept in a separate, persistent object).
+    ScoreKeep score;
 
     // Start is called before the first frame update
     void Start()
     {
+        // Make the score object persistent.
+        DontDestroyOnLoad(scoreKeeper);
+        // Hide endGameText until the game ends.
+        endGameText.gameObject.active = false;
+        // Load score from a separate object.
+        score = scoreKeeper.GetComponent<ScoreKeep>();
+        // And show it to the player.
+        scoreText.text = "Current score: " + score.playerOneScore + ":" + score.playerTwoScore;
         // Create the board.
         for (int i = 0; i < boardHeight; i++)
         {
@@ -264,12 +280,26 @@ public class BoardManager : MonoBehaviour
     // Score a goal and end the round.
     public void ScoreGoal(GoalAffiliation aff)
     {
-        Debug.Log(aff.ToString() + " scores a goal!");
+        endGameText.gameObject.active = true;
+        switch(aff)
+        {
+            case GoalAffiliation.PLAYER1:
+                endGameText.text = GoalAffiliation.PLAYER2 + " scored a goal!";
+                score.playerTwoScore++;
+                break;
+            default:
+                endGameText.text = GoalAffiliation.PLAYER1 + " scored a goal!";
+                score.playerOneScore++;
+                break;
+        }
+        scoreText.text = "Current score: " + score.playerOneScore + ":" + score.playerTwoScore;
     }
 
     public void Stalemate()
     {
-        Debug.Log("It's a draw!");
+        endGameText.gameObject.active = true;
+        endGameText.text = "It's a draw!";
+        Debug.Log("Everyone loses!");
     }
 
     // Opponent move.
@@ -285,12 +315,35 @@ public class BoardManager : MonoBehaviour
                 Stalemate();
                 return;
             }
+            List<GameObject> goodMoves = new List<GameObject>();
             foreach (GameObject move in legalMoves)
             {
+                // See which way is center.
+                int horizontalMove = (int)((boardWidth - 1) / 2 - xBall);
+                if (horizontalMove != 0)
+                {
+                    horizontalMove = horizontalMove / Mathf.Abs(horizontalMove);    // Because Mathf.Sign would return +1 when given a 0.
+                }
                 // Check if there's a move that would bring you closer to the goal (lower center of the board).
                 if (move.transform.position.y < yBall)
                 {
-                    dest = move;
+                    if (move.transform.position.x == xBall + horizontalMove)
+                    {
+                        // Probably the best (naive) move to make.
+                        dest = move;
+                        break;
+                    }
+                    goodMoves.Add(move);
+                }
+                if (goodMoves.Count > 0)
+                {
+                    // Make a random "okay" move.
+                    dest = goodMoves[(int)(Random.value * (goodMoves.Count-1))];
+                }
+                else
+                {
+                    // Just make any legal move.
+                    dest = legalMoves[(int)(Random.value * (legalMoves.Count - 1))];
                 }
             }
             if (legalMoves.Contains(dest))
@@ -335,5 +388,21 @@ public class BoardManager : MonoBehaviour
                 }
             }
         }
+    }
+
+    void Update()
+    {
+        if (Input.GetKeyDown("r"))
+        {
+            Debug.Log("Resetting the game...");
+            ResetGame();
+        }
+    }
+
+    // Reset game.
+    public void ResetGame()
+    {
+        SceneManager.LoadScene("SampleScene");
+        Debug.Log("The game was reset!");
     }
 }
